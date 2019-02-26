@@ -1,0 +1,72 @@
+---
+#
+# GlusterFS client (fuse)
+#
+
+#
+# Install GlusterFS client
+#
+
+- name: gluster | Add glusterfs repository (centos-release-glusterXX package)
+  yum:
+    name: "centos-release-gluster{{ glusterfs_version.replace('.', '') }}"
+    state: present
+  tags: "glusterfs"
+
+- name: gluster | Install glusterfs client
+  yum:
+    name:
+    - glusterfs
+    - glusterfs-fuse
+    state: present
+  tags: "glusterfs"
+
+
+#
+# Mount
+#
+
+- name: Create mount paths
+  file:
+    path: "{{ item.mount.path }}"
+    state: directory
+    owner: "{{ item.mount.owner | default ('root') }}"
+    group: "{{ item.mount.group | default ('root') }}"
+    mode:  "{{ item.mount.mode | default ('0755') }}"
+  with_items: "{{ glusterfs_volumes }}"
+  when: >
+    item.mount is defined and
+    ( item.state is defined and item.state == 'present' )
+  tags: "glusterfs"
+
+
+- name: Mount volumes
+  mount:
+    path: "{{ item.mount.path }}"
+    src: "{% if item.mount.server is defined %}{{ item.mount.server + ':/' + item.volume }}{% else %}{{ glusterfs_nodes[0] + ':/' + item.volume }}{% endif %}"
+    opts: "{{ item.mount.options |default(omit) }}"
+    fstype: glusterfs
+    state: mounted
+  with_items: "{{ glusterfs_volumes }}"
+  when: >
+    item.mount is defined and
+    ( item.state is defined and item.state == 'present' )
+  tags: "glusterfs"
+
+- name: Create folders
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "root"
+    group: "root"
+    mode:  "0755"
+  with_items: "{{ glusterfs_folders }}"
+
+
+- name: Create links to /shared/data folders
+  file:
+    state: link
+    src: "{{ item.src }}"
+    dest: "{{ item.dest }}"
+  with_items: "{{ glusterfs_links }}"
+  when: not ansible_check_mode

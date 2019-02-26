@@ -1,0 +1,65 @@
+---
+# Create LVM partition and filesystem for gluster
+
+# Modules ansible:
+# http://docs.ansible.com/ansible/latest/lvg_module.html
+# http://docs.ansible.com/ansible/latest/lvol_module.html
+
+
+- name: partition-lvm-fs | Create volume group
+  lvg:
+    vg: "{{ item.vgname }}"
+    pvs: "{{ item.storage_devices }}" # List of comma-separated devices
+    state: "present"
+  loop: "{{ glusterfs_vg }}"
+
+
+# A propos de lvol:
+# - La taille n'est utiliser qu'au moment de la creation
+#   La changer à posteriori ne changera rien
+# - thinpool was added to lvol in ansible 2.5
+# - n'aime pas trop les flotants en taille ("9.9G")
+
+- name: partition-lvm-fs | Create thin pool
+  lvol:
+    vg: "{{ item.vgname }}"
+    thinpool: "{{ item.poolname  }}"
+    size: "{{ item.poolsize }}"
+    state: "present"
+  loop: "{{ glusterfs_thinpool }}"
+
+
+- name: partition-lvm-fs | Create logical volumes
+  lvol:
+    vg: "{{ item.vgname }}"
+    thinpool: "{{ item.poolname |default(omit) }}"
+    lv: "{{ item.lvname  }}"
+    size: "{{ item.lvsize |default(omit) }}"
+  loop: "{{ glusterfs_lv }}"
+
+
+- name: partition-lvm-fs | Create xfs filesystem
+  filesystem:
+    fstype: xfs
+    dev: /dev/{{ item.vgname }}/{{ item.lvname }}
+    opts: "-i size=512"         # http://docs.gluster.org/en/latest/Install-Guide/Configure/
+  loop: "{{ glusterfs_lv }}"
+
+- name: gluster | Create mount directories
+  file:
+    name: "{{ item.mountpath }}" # all immediate subdirectories will be created if they do not exist
+    state: directory
+  loop: "{{ glusterfs_lv }}"
+
+- name: partition-lvm-fs | Mount
+  mount:
+    path: "{{ item.mountpath }}"
+    src: "/dev/{{ item.vgname }}/{{ item.lvname }}"
+    dump: "1"
+    passno: "2"
+    fstype: xfs
+    state: mounted
+  loop: "{{ glusterfs_lv }}"
+
+- name: partition-lvm-fs | Update facts (mounts)
+  setup: filter='ansible_mounts'

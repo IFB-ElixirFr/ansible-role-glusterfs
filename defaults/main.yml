@@ -1,0 +1,16 @@
+---
+# defaults file for glusterfs role
+
+glusterfs_version: "4.1"
+
+glusterfs_default_bricks_dir: /bricks
+
+glusterfs_volumes: []
+
+glusterfs_packages_EL:
+  - {package: "glusterfs"}
+  - {package: "glusterfs-cli"}
+  - {package: "glusterfs-libs"}
+  - {package: "glusterfs-server"}
+  - {package: "glusterfs-fuse"}
+  - {package: "glusterfs-geo-replication"}

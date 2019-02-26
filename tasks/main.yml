@@ -1,0 +1,17 @@
+---
+
+- name: Create partition and filesystem
+  include_tasks: partition-lvm-fs.yml
+  when: glusterfs_vg
+
+#- name: Configure firewalld
+#  include_tasks: configure-firewalld.yml
+#  when: firewalld_enabled
+
+- name: Install and configure glusterfs
+  include_tasks: gluster.yml
+  when: ansible_os_family == "RedHat"
+
+- name: Install and configure glusterfs client
+  include_tasks: client.yml
+  when: ansible_os_family == "RedHat"

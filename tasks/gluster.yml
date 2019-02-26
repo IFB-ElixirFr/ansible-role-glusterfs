@@ -1,0 +1,110 @@
+---
+#
+# GlusterFS
+#
+
+
+- name: Set fact glusterfs nodes list
+  set_fact:
+    glusterfs_nodes: "{{ ansible_play_hosts }}"
+  run_once: True
+  when: glusterfs_nodes is undefined
+
+
+
+#
+# Install
+#
+
+- name: gluster | Add glusterfs repository (centos-release-glusterXX package)
+  yum:
+    name: "centos-release-gluster{{ glusterfs_version.replace('.', '') }}"
+    state: present
+
+- name: gluster | Install glusterfs packages
+  yum:
+    name: "{{ item.package }}"
+    state: present
+  with_items: "{{ glusterfs_packages_EL }}"
+
+- name: gluster | start glusterfs service
+  service:
+    name: glusterd
+    state: started
+    enabled: yes
+
+
+# Create a subdirectory on the new file system to store the brick
+# Prevent accidental storage of data when the brick is not mounted
+- name: gluster | Create subdirectory ../brick
+  file:
+    name: "{{ item.mountpath }}/brick"
+    state: directory
+  with_items: "{{ glusterfs_lv }}"
+  when: item.mountpath in ansible_mounts|map(attribute='mount')|list
+
+
+#
+# Volumes
+#
+
+# On a pris le partit ici de créer le volume manuellement
+# On pourrait aussi s'appuyer sur le module glusterfs_volume (commenté ci-dessous)
+# https://docs.ansible.com/ansible/latest/modules/gluster_volume_module.html
+
+- name: gluster | Get existing volumes list
+  shell: "gluster volume list"
+  changed_when: false
+  register: glusterfs_volume_list
+  delegate_to: "{{ glusterfs_nodes[0] }}"
+  run_once: True
+
+- name: gluster | Manualy add peers and create gluster volume
+  fail:
+    msg: |
+      Please add peers and create gluster volume manually.
+      On one gluster server:
+      1. gluster peer probe
+      2. gluster volume create
+      3. replay the playbook
+  when: glusterfs_volume_list.stdout is defined and glusterfs_volume_list.stdout in 'No volumes'
+  delegate_to: "{{ glusterfs_nodes[0] }}"
+  run_once: True
+
+
+#- debug: var=glusterfs_volume_list.stdout
+#  when: glusterfs_volume_list.stdout not in 'No volumes'
+#  delegate_to: "{{ glusterfs_nodes[0] }}"
+#  run_once: True
+
+
+#- name: gluster | Check volume(s)
+#  gluster_volume:
+#    name: "{{ item.volume }}"
+#    cluster: "{% if item.nodes is defined %}{{ item.nodes }}{% else %}{{ glusterfs_nodes }}{% endif %}"
+#    force: "{{ item.force | default('yes') }}"
+#    transport: "{{ item.transport | default('tcp') }}"
+#    state: "{{ item.state | default('present') }}"
+#    replicas: "{{ item.replica | default(omit) }}"
+#    stripes: "{{ item.stripe | default(omit) }}"
+#    disperses: "{{ item.disperse | default(omit) }}"
+#    redundancies: "{{ item.redundancy | default(omit) }}"
+#    options: "{{ item.options | default(omit) }}"
+#    brick: "{% if item.bricks is defined %}{{ item.bricks | join(',') }}{% else %}{{ glusterfs_default_bricks_dir }}/{{ item.volume }}{% endif %}"
+#  delegate_to: "{{ glusterfs_nodes[0] }}"
+#  run_once: True
+#  with_items: "{{ glusterfs_volumes }}"
+#  when: >
+#    item.state is not defined or item.state == 'present'
+
+
+- name: gluster | Start volume(s)
+  gluster_volume:
+    name: "{{ item.volume }}"
+    state: started
+  delegate_to: "{{ glusterfs_nodes[0] }}"
+  run_once: True
+  with_items: "{{ glusterfs_volumes }}"
+  when: >
+    ( item.state is not defined or item.state == 'present' ) and
+    ( glusterfs_volume_list.stdout is defined and item.volume in glusterfs_volume_list.stdout )
